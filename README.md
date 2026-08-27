@@ -2,6 +2,8 @@
 
 A production-style .NET 8 microservice system for a game item economy, covering catalog, inventory, trading, and identity, deployed to Azure Kubernetes Service.
 
+**Live:** [gameplayeconomy.com](https://gameplayeconomy.com)
+
 This repo is an overview of the project. It has an architecture summary, diagrams, and links to the code for each service below. Each service lives in its own repo with its own version history and its own CI/CD pipeline, since this project is built in a true polyrepo structure, with each service as a separate, independently deployed codebase.
 
 For the full architecture write-up, see [ARCHITECTURE.md](./ARCHITECTURE.md).
@@ -10,7 +12,7 @@ For the full architecture write-up, see [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 Four backend services, Catalog, Inventory, Trading, and Identity, each own their data. They communicate asynchronously through MassTransit and deploy independently on Azure Kubernetes Service. A React frontend and all four services sit behind a single ingress gateway.
 
-![Gameplay Economy production runtime architecture](./diagrams/architecture-overview.png)
+![Gameplay Economy production runtime architecture](./diagrams/image.png)
 
 | Repo | Role |
 |---|---|
@@ -26,13 +28,20 @@ Four backend services, Catalog, Inventory, Trading, and Identity, each own their
 
 **Purchase saga.** A purchase involves three services: Trading, Inventory, and Identity. A saga pattern coordinates the transaction across all three. [`PurchaseStateMachine.cs`](https://github.com/dotnetmicroservice001/Play.Trading/blob/main/src/Play.Trading.Service/StateMachines/PurchaseStateMachine.cs) is a MassTransit state machine that runs the happy path and compensates on failure. If debiting currency fails after items were already granted, it issues a `SubtractItems` command that rolls back the grant and keeps both services in sync.
 
-![The purchase saga state machine](./diagrams/purchase-saga.png)
+```
+PurchaseRequested
+  → CalculatePurchaseTotalActivity (priced from Trading's local CatalogItem replica)
+  → send GrantItems → Inventory                         [state: Accepted]
+      ⤷ on InventoryItemsGranted → send DebitGil → Identity   [state: ItemsGranted]
+          ⤷ on GilDebited → Completed, push status via SignalR
+          ⤷ on Fault<DebitGil> → send SubtractItems (compensating transaction, rolls back the grant)
+                                → Faulted, push status via SignalR
+      ⤷ on Fault<GrantItems> → Faulted, push status via SignalR
+```
 
 Every completed purchase also runs an inline anomaly check. A running mean and variance per user, using Welford's algorithm, flags any purchase more than three standard deviations from that user's history. This check runs live inside the saga. See [`UserPurchaseStats.cs`](https://github.com/dotnetmicroservice001/Play.Trading/blob/main/src/Play.Trading.Service/Entities/UserPurchaseStats.cs).
 
 **Independent deploys per service.** Each repo ships itself. A push to `main` bumps the version, publishes the shared event and command contracts as a NuGet package, builds and pushes a Docker image to Azure Container Registry, and rolls it out with Helm. Each service deploys on its own schedule.
-
-![CI/CD pipeline](./diagrams/cicd-pipeline.png)
 
 **Workload identity for secrets access.** Each service's Kubernetes pod authenticates to Azure directly through [Azure AD Workload Identity](https://github.com/dotnetmicroservice001/Play.Infra/blob/main/helm/microservice/templates/serviceaccount.yaml), a federated identity per service, to read from Azure Key Vault. CI/CD authenticates to Azure the same way, through GitHub Actions OIDC.
 

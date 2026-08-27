@@ -1,6 +1,6 @@
 # Gameplay Economy: System Design & Production Architecture
 
-A consolidated reference for the Gameplay Economy platform: a .NET 8 microservice system for a game item economy (catalog, inventory, trading, and identity), deployed to Azure Kubernetes Service. This document is meant to be (a) committed to the repo as living documentation and (b) pasted into a diagramming tool to regenerate the architecture drawing whenever the system changes.
+A consolidated reference for the Gameplay Economy platform: a .NET 8 microservice system for a game item economy (catalog, inventory, trading, and identity), deployed to Azure Kubernetes Service. This document is meant to be committed to the repo as living documentation.
 
 Repositories (GitHub org `dotnetmicroservice001`, a polyrepo with one repo per service):
 
